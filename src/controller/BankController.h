@@ -6,6 +6,7 @@
 #include <QVariantList>
 #include <optional>
 #include <unordered_map>
+#include <string_view>
 #include "../models/User.h"
 #include "../models/Account.h"
 #include "../models/Card.h"
@@ -23,7 +24,7 @@ class BankController : public QObject {
 public:
     explicit BankController(QObject *parent = nullptr);
 
-    Q_INVOKABLE void seedAdmin();
+    Q_INVOKABLE void seedAdmin() const;
 
     Q_INVOKABLE void login(const QString &username, const QString &password);
     Q_INVOKABLE void logout();
@@ -37,7 +38,7 @@ public:
     Q_INVOKABLE QVariantList listUserAccounts(const QString &username) const; // any user by name
 
     Q_INVOKABLE void addAccount(const QString &currency);
-    Q_INVOKABLE void addCard(const QString &holderName, const QString &expiry, const QString &linkedAccount);
+    Q_INVOKABLE void addCard([[maybe_unused]] const QString &holderName, const QString &expiry, const QString &linkedAccount);
     Q_INVOKABLE void addFavorite(const QString &name, const QString &toCard, const QString &note);
 
     Q_INVOKABLE void transfer(const QString &fromAccount, const QString &toCard, qlonglong cents, const QString &note, const QString &category = "other");
@@ -69,7 +70,15 @@ public:
 
     bool isAuthenticated() const { return currentUser.has_value() || isAdminLogin; }
     bool isAdmin() const { return isAdminLogin; }
-    QString username() const { return isAdminLogin ? QStringLiteral("admin") : (currentUser ? QString::fromStdString(currentUser->usernameValue) : QString()); }
+    QString username() const {
+        if (isAdminLogin) {
+            return QStringLiteral("admin");
+        }
+        if (currentUser) {
+            return QString::fromStdString(currentUser->usernameValue);
+        }
+        return {};
+    }
 
 signals:
     void authenticatedChanged();
@@ -81,7 +90,7 @@ private:
     bool isAdminLogin = false;
 
     void saveCurrent();
-    bool adjustRecipientBalance(const std::string &destination, long long deltaCents, std::string *ownerUsername = nullptr);
+    bool adjustRecipientBalance(std::string_view destination, long long deltaCents, std::string *ownerUsername = nullptr) const;
 };
 
 

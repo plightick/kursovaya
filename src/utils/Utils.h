@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <random>
 #include <sstream>
 #include <iomanip>
@@ -18,15 +19,15 @@ inline std::string generateNumericId(std::size_t digits) {
     return out;
 }
 
-inline std::string trim(const std::string &s) {
+inline std::string trim(std::string_view s) {
     std::size_t start = s.find_first_not_of(" \t\n\r");
-    if (start == std::string::npos) return "";
+    if (start == std::string::npos) return {};
     std::size_t end = s.find_last_not_of(" \t\n\r");
-    return s.substr(start, end - start + 1);
+    return std::string{s.substr(start, end - start + 1)};
 }
 
-inline std::string weakHash(const std::string &input) {
-    std::hash<std::string> hasher;
+inline std::string weakHash(std::string_view input) {
+    std::hash<std::string_view> hasher;
     auto h = hasher(input);
     std::stringstream ss;
     ss << std::hex << std::setw(16) << std::setfill('0') << h;

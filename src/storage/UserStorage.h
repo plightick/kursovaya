@@ -70,7 +70,8 @@ public:
         for (const auto &name : listUsernames()) {
             try {
                 out.push_back(loadUser(name));
-            } catch (...) {
+            } catch (const BankingError &) {
+                continue;
             }
         }
         return out;

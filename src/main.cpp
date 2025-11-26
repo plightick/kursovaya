@@ -7,10 +7,10 @@ int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
 
+    BankController controller; // stack-allocated, lifetime tied to this scope
     QQmlApplicationEngine engine;
-    auto controller = new BankController(&engine);
-    controller->seedAdmin();
-    engine.rootContext()->setContextProperty("bank", controller);
+    controller.seedAdmin();
+    engine.rootContext()->setContextProperty("bank", &controller);
     QObject::connect(
         &engine,
         &QQmlApplicationEngine::objectCreationFailed,
@@ -19,5 +19,5 @@ int main(int argc, char *argv[])
         Qt::QueuedConnection);
     engine.load(QUrl("qrc:/Main.qml"));
 
-    return app.exec();
+    return QGuiApplication::exec();
 }

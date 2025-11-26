@@ -6,27 +6,27 @@
 
 class BankingError : public std::runtime_error {
 public:
-    explicit BankingError(const std::string &message) : std::runtime_error(message) {}
+    using std::runtime_error::runtime_error;
 };
 
 class NotFoundError : public BankingError {
 public:
-    explicit NotFoundError(const std::string &message) : BankingError(message) {}
+    using BankingError::BankingError;
 };
 
 class ValidationError : public BankingError {
 public:
-    explicit ValidationError(const std::string &message) : BankingError(message) {}
+    using BankingError::BankingError;
 };
 
 class AuthError : public BankingError {
 public:
-    explicit AuthError(const std::string &message) : BankingError(message) {}
+    using BankingError::BankingError;
 };
 
 class CardExpiredError : public BankingError {
 public:
-    explicit CardExpiredError(const std::string &message) : BankingError(message) {}
+    using BankingError::BankingError;
 };
 
 

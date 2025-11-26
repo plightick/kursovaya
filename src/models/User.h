@@ -60,7 +60,7 @@ public:
         std::getline(is, u.passwordHash);
 
         std::getline(is, line);
-        std::size_t nAcc = line.empty() ? 0 : static_cast<std::size_t>(std::stoul(line));
+        std::size_t nAcc = line.empty() ? 0u : std::stoul(line);
         u.accounts.clear();
         for (std::size_t i = 0; i < nAcc; ++i) {
             Account a;
@@ -72,7 +72,7 @@ public:
         }
 
         std::getline(is, line);
-        std::size_t nCards = line.empty() ? 0 : static_cast<std::size_t>(std::stoul(line));
+        std::size_t nCards = line.empty() ? 0u : std::stoul(line);
         u.cards.clear();
         for (std::size_t i = 0; i < nCards; ++i) {
             Card c;
@@ -84,7 +84,7 @@ public:
         }
 
         std::getline(is, line);
-        std::size_t nTx = line.empty() ? 0 : static_cast<std::size_t>(std::stoul(line));
+        std::size_t nTx = line.empty() ? 0u : std::stoul(line);
         u.history.clear();
         for (std::size_t i = 0; i < nTx; ++i) {
             Transaction t;
@@ -96,7 +96,7 @@ public:
         }
 
         std::getline(is, line);
-        std::size_t nFav = line.empty() ? 0 : static_cast<std::size_t>(std::stoul(line));
+        std::size_t nFav = line.empty() ? 0u : std::stoul(line);
         u.favorites.clear();
         for (std::size_t i = 0; i < nFav; ++i) {
             FavoritePayment f;
@@ -108,7 +108,7 @@ public:
         }
 
         if (std::getline(is, line)) {
-            std::size_t nNotif = line.empty() ? 0 : static_cast<std::size_t>(std::stoul(line));
+            std::size_t nNotif = line.empty() ? 0u : std::stoul(line);
             u.notifications.clear();
             for (std::size_t i = 0; i < nNotif; ++i) {
                 std::string notifLine;

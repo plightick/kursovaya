@@ -5,6 +5,8 @@
 #include <QDate>
 #include <filesystem>
 #include <fstream>
+#include <algorithm>
+#include <chrono>
 
 using namespace utils;
 using namespace storage;
@@ -12,7 +14,7 @@ using namespace storage;
 BankController::BankController(QObject *parent) : QObject(parent) {
 }
 
-void BankController::seedAdmin() {
+void BankController::seedAdmin() const {
     UserStorage::ensureDataDirs();
 }
 
@@ -40,7 +42,7 @@ void BankController::login(const QString &username, const QString &password) {
         isAdminLogin = false;
         emit authenticatedChanged();
         emit infoMessage("Вход выполнен");
-    } catch (const std::exception &e) {
+    } catch (const BankingError &e) {
         emit errorOccured(QString::fromStdString(e.what()));
     }
 }
@@ -59,7 +61,7 @@ void BankController::registerUser(const QString &username, const QString &passwo
         RegularUser u(uname, weakHash(password.toStdString()));
         UserStorage::saveUser(u);
         emit infoMessage("Пользователь создан");
-    } catch (const std::exception &e) {
+    } catch (const BankingError &e) {
         emit errorOccured(QString::fromStdString(e.what()));
     }
 }
@@ -71,7 +73,7 @@ QVariantList BankController::listAccounts() const {
         QVariantMap m;
         m["accountNumber"] = QString::fromStdString(a.accountNumber);
         m["currency"] = QString::fromStdString(a.currency);
-        m["balanceCents"] = static_cast<qlonglong>(a.balanceCents);
+        m["balanceCents"] = a.balanceCents;
         out.push_back(m);
     }
     return out;
@@ -105,8 +107,9 @@ QVariantList BankController::listUserCards(const QString &username) const {
             m["linkedAccount"] = QString::fromStdString(c.linkedAccount);
             out.push_back(m);
         }
-    } catch (...) {
-        // ignore missing user
+    } catch (const NotFoundError &) {
+        // user not found: return empty list
+        return out;
     }
     return out;
 }
@@ -121,11 +124,10 @@ QVariantList BankController::listUserAccounts(const QString &username) const {
             QVariantMap m;
             m["accountNumber"] = QString::fromStdString(a.accountNumber);
             m["currency"] = QString::fromStdString(a.currency);
-            m["balanceCents"] = static_cast<qlonglong>(a.balanceCents);
+            m["balanceCents"] = a.balanceCents;
             out.push_back(m);
         }
-    } catch (...) {
-    }
+    } catch (const NotFoundError &) { return out; }
     return out;
 }
 
@@ -137,8 +139,8 @@ QVariantList BankController::listHistory() const {
         m["id"] = QString::fromStdString(t.id);
         m["fromAccount"] = QString::fromStdString(t.fromAccount);
         m["toCard"] = QString::fromStdString(t.toCard);
-        m["cents"] = static_cast<qlonglong>(t.cents);
-        m["timestamp"] = static_cast<qlonglong>(t.timestamp);
+        m["cents"] = t.cents;
+        m["timestamp"] = t.timestamp;
         m["note"] = QString::fromStdString(t.note);
         m["status"] = QString::fromStdString(t.status);
         m["cancelReason"] = QString::fromStdString(t.cancelReason);
@@ -170,19 +172,19 @@ void BankController::addAccount(const QString &currency) {
         currentUser->accounts.push_back(a);
         saveCurrent();
         emit infoMessage("Счет добавлен");
-    } catch (const std::exception &e) {
+    } catch (const BankingError &e) {
         emit errorOccured(QString::fromStdString(e.what()));
     }
 }
 
 void BankController::addCard(const QString &holderName, const QString &expiry, const QString &linkedAccount) {
-    Q_UNUSED(holderName);  // Имя берется из текущего пользователя
     try {
         if (!currentUser) throw AuthError("Необходима авторизация");
-        auto it = std::find_if(currentUser->accounts.begin(), currentUser->accounts.end(), [&](const Account &a){
-            return a.accountNumber == linkedAccount.toStdString();
-        });
-        if (it == currentUser->accounts.end()) throw ValidationError("Нет такого счета");
+        if (auto it = std::find_if(currentUser->accounts.begin(), currentUser->accounts.end(), [&](const Account &a){
+                return a.accountNumber == linkedAccount.toStdString();
+            }); it == currentUser->accounts.end()) {
+            throw ValidationError("Нет такого счета");
+        }
         Card c;
         c.cardNumber = generateNumericId(16);
         c.holderName = currentUser->usernameValue;
@@ -191,7 +193,7 @@ void BankController::addCard(const QString &holderName, const QString &expiry, c
         currentUser->cards.push_back(c);
         saveCurrent();
         emit infoMessage("Карта добавлена");
-    } catch (const std::exception &e) {
+    } catch (const BankingError &e) {
         emit errorOccured(QString::fromStdString(e.what()));
     }
 }
@@ -206,7 +208,7 @@ void BankController::addFavorite(const QString &name, const QString &toCard, con
         currentUser->favorites.push_back(f);
         saveCurrent();
         emit infoMessage("Избранный платеж добавлен");
-    } catch (const std::exception &e) {
+    } catch (const BankingError &e) {
         emit errorOccured(QString::fromStdString(e.what()));
     }
 }
@@ -214,20 +216,22 @@ void BankController::addFavorite(const QString &name, const QString &toCard, con
 void BankController::transfer(const QString &fromAccount, const QString &toCard, qlonglong cents, const QString &note, const QString &category) {
     try {
         if (!currentUser) throw AuthError("Необходима авторизация");
-        auto it = std::find_if(currentUser->accounts.begin(), currentUser->accounts.end(), [&](const Account &a){
-            return a.accountNumber == fromAccount.toStdString();
-        });
-        if (it == currentUser->accounts.end()) throw ValidationError("Нет такого счета");
-        if (cents <= 0) throw ValidationError("Сумма должна быть положительной");
-        if (it->balanceCents < cents) throw ValidationError("Недостаточно средств");
-        it->balanceCents -= cents;
+        if (auto it = std::find_if(currentUser->accounts.begin(), currentUser->accounts.end(), [&](const Account &a){
+                return a.accountNumber == fromAccount.toStdString();
+            }); it == currentUser->accounts.end()) {
+            throw ValidationError("Нет такого счета");
+        } else {
+            if (cents <= 0) throw ValidationError("Сумма должна быть положительной");
+            if (it->balanceCents < cents) throw ValidationError("Недостаточно средств");
+            it->balanceCents -= cents;
+        }
 
         Transaction t;
         t.id = generateNumericId(12);
         t.fromAccount = fromAccount.toStdString();
         t.toCard = toCard.toStdString();
         t.cents = cents;
-        t.timestamp = std::time(nullptr);
+        t.timestamp = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
         t.note = note.toStdString();
         t.category = category.isEmpty() ? "other" : category.toStdString();
         t.status = "completed";
@@ -238,7 +242,7 @@ void BankController::transfer(const QString &fromAccount, const QString &toCard,
         bool credited = adjustRecipientBalance(toCard.toStdString(), cents);
 
         emit infoMessage(credited ? "Перевод выполнен" : "Перевод выполнен (получатель не найден)");
-    } catch (const std::exception &e) {
+    } catch (const BankingError &e) {
         emit errorOccured(QString::fromStdString(e.what()));
     }
 }
@@ -251,7 +255,7 @@ void BankController::payFavorite(const QString &favName, const QString &fromAcco
         });
         if (it == currentUser->favorites.end()) throw ValidationError("Нет такого избранного платежа");
         transfer(fromAccount, QString::fromStdString(it->toCard), cents, QString::fromStdString(it->note), category);
-    } catch (const std::exception &e) {
+    } catch (const BankingError &e) {
         emit errorOccured(QString::fromStdString(e.what()));
     }
 }
@@ -261,33 +265,35 @@ void BankController::depositToAccount(const QString &accountNumber, qlonglong ce
         if (!currentUser) throw AuthError("Необходима авторизация");
         if (cents <= 0) throw ValidationError("Сумма должна быть положительной");
         auto accountId = accountNumber.toStdString();
-        auto it = std::find_if(currentUser->accounts.begin(), currentUser->accounts.end(), [&](const Account &a){
-            return a.accountNumber == accountId;
-        });
-        if (it == currentUser->accounts.end()) throw ValidationError("Нет такого счета");
-        it->balanceCents += cents;
+        if (auto it = std::find_if(currentUser->accounts.begin(), currentUser->accounts.end(), [&](const Account &a){
+                return a.accountNumber == accountId;
+            }); it == currentUser->accounts.end()) {
+            throw ValidationError("Нет такого счета");
+        } else {
+            it->balanceCents += cents;
+        }
 
         Transaction t;
         t.id = generateNumericId(12);
         t.fromAccount = externalAccount.toStdString();
         t.toCard = accountId;
         t.cents = cents;
-        t.timestamp = std::time(nullptr);
+        t.timestamp = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
         t.note = "Пополнение счета";
         t.category = "other";
         t.status = "completed";
         currentUser->history.push_back(t);
         saveCurrent();
         emit infoMessage("Счет пополнен");
-    } catch (const std::exception &e) {
+    } catch (const BankingError &e) {
         emit errorOccured(QString::fromStdString(e.what()));
     }
 }
 
 void BankController::setAccountBalance(const QString &accountNumber, qlonglong cents) {
-    Q_UNUSED(accountNumber);
-    Q_UNUSED(cents);
-    emit errorOccured("Используйте кнопку пополнения");
+    emit errorOccured(QStringLiteral("Нельзя напрямую установить баланс для счета %1. Используйте пополнение на %2 коп.")
+                          .arg(accountNumber)
+                          .arg(cents));
 }
 
 QStringList BankController::listUsers() const {
@@ -300,9 +306,9 @@ QStringList BankController::listUsers() const {
 QStringList BankController::searchUsers(const QString &query) const {
     QStringList out;
     if (!isAdminLogin) return out;
-    auto q = query.trimmed().toStdString();
+    auto q = query.trimmed();
     for (const auto &name : UserStorage::listUsernames()) {
-        if (name.find(q) != std::string::npos) out.push_back(QString::fromStdString(name));
+        if (QString::fromStdString(name).contains(q)) out.push_back(QString::fromStdString(name));
     }
     return out;
 }
@@ -323,19 +329,17 @@ QStringList BankController::sortUsers(const QString &sortBy) const {
     QStringList out;
     if (!isAdminLogin) return out;
     auto users = UserStorage::loadAll();
-    std::string sort = sortBy.trimmed().toLower().toStdString();
-    
-    if (sort == "accounts" || sort == "счета") {
+    if (auto sortKey = sortBy.trimmed().toLower().toStdString(); sortKey == "accounts" || sortKey == "счета") {
         std::sort(users.begin(), users.end(), [](const RegularUser &a, const RegularUser &b){
             if (a.accounts.size() == b.accounts.size()) return a.usernameValue < b.usernameValue;
             return a.accounts.size() < b.accounts.size();
         });
-    } else if (sort == "cards" || sort == "карты") {
+    } else if (sortKey == "cards" || sortKey == "карты") {
         std::sort(users.begin(), users.end(), [](const RegularUser &a, const RegularUser &b){
             if (a.cards.size() == b.cards.size()) return a.usernameValue < b.usernameValue;
             return a.cards.size() < b.cards.size();
         });
-    } else if (sort == "transactions" || sort == "транзакции" || sort == "переводы") {
+    } else if (sortKey == "transactions" || sortKey == "транзакции" || sortKey == "переводы") {
         std::sort(users.begin(), users.end(), [](const RegularUser &a, const RegularUser &b){
             if (a.history.size() == b.history.size()) return a.usernameValue < b.usernameValue;
             return a.history.size() < b.history.size();
@@ -356,20 +360,18 @@ QVariantList BankController::getAllUsersInfo(const QString &sortBy) const {
     if (!isAdminLogin) return out;
     
     auto users = UserStorage::loadAll();
-    std::string sort = sortBy.trimmed().toLower().toStdString();
-    
     // Сортировка
-    if (sort == "accounts" || sort == "счета") {
+    if (auto sortKey = sortBy.trimmed().toLower().toStdString(); sortKey == "accounts" || sortKey == "счета") {
         std::sort(users.begin(), users.end(), [](const RegularUser &a, const RegularUser &b){
             if (a.accounts.size() == b.accounts.size()) return a.usernameValue < b.usernameValue;
             return a.accounts.size() < b.accounts.size();
         });
-    } else if (sort == "cards" || sort == "карты") {
+    } else if (sortKey == "cards" || sortKey == "карты") {
         std::sort(users.begin(), users.end(), [](const RegularUser &a, const RegularUser &b){
             if (a.cards.size() == b.cards.size()) return a.usernameValue < b.usernameValue;
             return a.cards.size() < b.cards.size();
         });
-    } else if (sort == "transactions" || sort == "транзакции" || sort == "переводы") {
+    } else if (sortKey == "transactions" || sortKey == "транзакции" || sortKey == "переводы") {
         std::sort(users.begin(), users.end(), [](const RegularUser &a, const RegularUser &b){
             if (a.history.size() == b.history.size()) return a.usernameValue < b.usernameValue;
             return a.history.size() < b.history.size();
@@ -396,7 +398,7 @@ QVariantList BankController::getAllUsersInfo(const QString &sortBy) const {
         for (const auto &acc : u.accounts) {
             totalBalance += acc.balanceCents;
         }
-        m["totalBalance"] = static_cast<qlonglong>(totalBalance);
+        m["totalBalance"] = totalBalance;
         
         // Список счетов
         QVariantList accountsList;
@@ -404,7 +406,7 @@ QVariantList BankController::getAllUsersInfo(const QString &sortBy) const {
             QVariantMap accMap;
             accMap["accountNumber"] = QString::fromStdString(acc.accountNumber);
             accMap["currency"] = QString::fromStdString(acc.currency);
-            accMap["balanceCents"] = static_cast<qlonglong>(acc.balanceCents);
+            accMap["balanceCents"] = acc.balanceCents;
             accountsList.append(accMap);
         }
         m["accounts"] = accountsList;
@@ -431,7 +433,7 @@ QVariantList BankController::sortTransfers(const QString &sortBy) const {
     QVariantList out;
     if (!isAdminLogin) return out;
     
-    std::string sort = sortBy.trimmed().toLower().toStdString();
+    if (auto sortKey = sortBy.trimmed().toLower().toStdString(); true) {
     auto users = UserStorage::loadAll();
     std::vector<QVariantMap> transfers;
     
@@ -442,8 +444,8 @@ QVariantList BankController::sortTransfers(const QString &sortBy) const {
             m["id"] = QString::fromStdString(t.id);
             m["fromAccount"] = QString::fromStdString(t.fromAccount);
             m["toCard"] = QString::fromStdString(t.toCard);
-            m["cents"] = static_cast<qlonglong>(t.cents);
-            m["timestamp"] = static_cast<qlonglong>(t.timestamp);
+            m["cents"] = t.cents;
+            m["timestamp"] = t.timestamp;
             m["note"] = QString::fromStdString(t.note);
             m["status"] = QString::fromStdString(t.status);
             m["cancelReason"] = QString::fromStdString(t.cancelReason);
@@ -451,7 +453,7 @@ QVariantList BankController::sortTransfers(const QString &sortBy) const {
         }
     }
     
-    if (sort == "user" || sort == "пользователь") {
+    if (sortKey == "user" || sortKey == "пользователь") {
         std::sort(transfers.begin(), transfers.end(), [](const QVariantMap &a, const QVariantMap &b){
             QString userA = a["user"].toString();
             QString userB = b["user"].toString();
@@ -460,7 +462,7 @@ QVariantList BankController::sortTransfers(const QString &sortBy) const {
             }
             return userA < userB;
         });
-    } else if (sort == "amount" || sort == "сумма") {
+    } else if (sortKey == "amount" || sortKey == "сумма") {
         std::sort(transfers.begin(), transfers.end(), [](const QVariantMap &a, const QVariantMap &b){
             qlonglong amountA = a["cents"].toLongLong();
             qlonglong amountB = b["cents"].toLongLong();
@@ -469,11 +471,11 @@ QVariantList BankController::sortTransfers(const QString &sortBy) const {
             }
             return amountA > amountB;
         });
-    } else if (sort == "date" || sort == "дата") {
+    } else if (sortKey == "date" || sortKey == "дата") {
         std::sort(transfers.begin(), transfers.end(), [](const QVariantMap &a, const QVariantMap &b){
             return a["timestamp"].toLongLong() > b["timestamp"].toLongLong();
         });
-    } else if (sort == "status" || sort == "статус") {
+    } else if (sortKey == "status" || sortKey == "статус") {
         std::sort(transfers.begin(), transfers.end(), [](const QVariantMap &a, const QVariantMap &b){
             QString statusA = a["status"].toString();
             QString statusB = b["status"].toString();
@@ -486,6 +488,7 @@ QVariantList BankController::sortTransfers(const QString &sortBy) const {
     
     for (const auto &m : transfers) out.push_back(m);
     return out;
+    }
 }
 
 QVariantMap BankController::receiptFor(const QString &transactionId) const {
@@ -497,8 +500,8 @@ QVariantMap BankController::receiptFor(const QString &transactionId) const {
         m["id"] = QString::fromStdString(t.id);
         m["fromAccount"] = QString::fromStdString(t.fromAccount);
         m["toCard"] = QString::fromStdString(t.toCard);
-        m["cents"] = static_cast<qlonglong>(t.cents);
-        m["timestamp"] = static_cast<qlonglong>(t.timestamp);
+        m["cents"] = t.cents;
+        m["timestamp"] = t.timestamp;
         m["note"] = QString::fromStdString(t.note);
         m["status"] = QString::fromStdString(t.status);
         m["cancelReason"] = QString::fromStdString(t.cancelReason);
@@ -555,19 +558,15 @@ QString BankController::saveReceiptToFile(const QString &transactionId, const QS
             ofs << "Причина отмены: " << receipt["cancelReason"].toString().toStdString() << "\n";
         }
         if (receipt["timestamp"].toLongLong() > 0) {
-            auto ts = static_cast<std::time_t>(receipt["timestamp"].toLongLong());
-            char buf[100];
-            std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", std::localtime(&ts));
-            ofs << "Дата/время: " << buf << "\n";
+            qint64 ts = receipt["timestamp"].toLongLong();
+            QString dt = QDateTime::fromSecsSinceEpoch(ts).toString("yyyy-MM-dd HH:mm:ss");
+            ofs << "Дата/время: " << dt.toStdString() << "\n";
         }
         ofs << "================\n";
         emit infoMessage("Чек сохранен: " + filePath);
         return filePath;
-    } catch (const std::exception &e) {
+    } catch (const std::ios_base::failure &e) {
         emit errorOccured(QString::fromStdString(e.what()));
-        return QString();
-    } catch (...) {
-        emit errorOccured("Неизвестная ошибка при сохранении чека");
         return QString();
     }
 }
@@ -613,11 +612,11 @@ QVariantMap BankController::getExpenseStats() const {
         long long amount = categoryTotals.count(key) ? categoryTotals[key] : 0;
         QVariantMap catData;
         catData["name"] = name;
-        catData["amount"] = static_cast<qlonglong>(amount);
+        catData["amount"] = amount;
         catData["percent"] = total > 0 ? (amount * 100.0 / total) : 0.0;
         result[QString::fromStdString(key)] = catData;
     }
-    result["total"] = static_cast<qlonglong>(total);
+    result["total"] = total;
     return result;
 }
 
@@ -638,7 +637,7 @@ void BankController::clearNotifications() {
         currentUser->notifications.clear();
         saveCurrent();
         emit infoMessage("Уведомления очищены");
-    } catch (const std::exception &e) {
+    } catch (const BankingError &e) {
         emit errorOccured(QString::fromStdString(e.what()));
     }
 }
@@ -671,7 +670,10 @@ void BankController::cancelTransfer(const QString &transactionId, const QString 
                         RegularUser recipient = UserStorage::loadUser(recipientName);
                         recipient.notifications.push_back("Платеж " + it->id + " отменен администратором. Причина: " + reasonStd);
                         UserStorage::saveUser(recipient);
-                    } catch (...) {}
+                    } catch (const BankingError &e) {
+                        Q_UNUSED(e);
+                        recipientName.clear();
+                    }
                 }
                 found = true;
                 break;
@@ -679,7 +681,7 @@ void BankController::cancelTransfer(const QString &transactionId, const QString 
         }
         if (!found) throw NotFoundError("Платеж не найден");
         emit infoMessage("Платеж отменен");
-    } catch (const std::exception &e) {
+    } catch (const BankingError &e) {
         emit errorOccured(QString::fromStdString(e.what()));
     }
 }
@@ -687,14 +689,15 @@ void BankController::cancelTransfer(const QString &transactionId, const QString 
 void BankController::clearAllUsers() {
     try {
         if (!isAdminLogin) throw AuthError("Только администратор");
-        auto root = storage::usersRoot();
-        if (std::filesystem::exists(root)) {
+        if (auto root = storage::usersRoot(); std::filesystem::exists(root)) {
             for (auto &entry : std::filesystem::directory_iterator(root)) {
                 std::filesystem::remove_all(entry.path());
             }
         }
         emit infoMessage("Все пользователи удалены");
-    } catch (const std::exception &e) {
+    } catch (const std::filesystem::filesystem_error &e) {
+        emit errorOccured(QString::fromStdString(e.what()));
+    } catch (const BankingError &e) {
         emit errorOccured(QString::fromStdString(e.what()));
     }
 }
@@ -716,7 +719,8 @@ QString BankController::ratesText() const {
         std::ifstream ifs(path);
         std::string all((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
         return QString::fromStdString(all);
-    } catch (...) {
+    } catch (const std::filesystem::filesystem_error &)
+    {
         return QStringLiteral("Курсы недоступны");
     }
 }
@@ -744,7 +748,6 @@ bool BankController::isCardExpired(const QString &expiry) const {
         }
         
         QDate currentDate = QDate::currentDate();
-        int currentYear = currentDate.year() % 100;
         int currentMonth = currentDate.month();
         
         // Полный год (2000 + год из двух цифр)
@@ -768,40 +771,37 @@ bool BankController::isCardExpired(const QString &expiry) const {
     } catch (const ValidationError &) {
         // Ошибка валидации - считаем, что карта не просрочена (неверный формат)
         return false;
-    } catch (...) {
+    } catch (const std::exception &)
+    {
         // Другие ошибки - считаем, что карта не просрочена
         return false;
     }
 }
 
-bool BankController::adjustRecipientBalance(const std::string &destination, long long deltaCents, std::string *ownerUsername) {
+bool BankController::adjustRecipientBalance(std::string_view destination, long long deltaCents, std::string *ownerUsername) const {
     bool updated = false;
     for (const auto &name : UserStorage::listUsernames()) {
         try {
             RegularUser user = UserStorage::loadUser(name);
             bool changed = false;
-            auto accountIt = std::find_if(user.accounts.begin(), user.accounts.end(), [&](const Account &a){
-                return a.accountNumber == destination;
-            });
-            if (accountIt != user.accounts.end()) {
+            const std::string destStr(destination);
+            if (auto accountIt = std::find_if(user.accounts.begin(), user.accounts.end(), [&](const Account &a){
+                    return a.accountNumber == destStr;
+                }); accountIt != user.accounts.end()) {
                 long long newBalance = accountIt->balanceCents + deltaCents;
                 if (newBalance < 0) newBalance = 0;
                 accountIt->balanceCents = newBalance;
                 changed = true;
-            } else {
-                auto cardIt = std::find_if(user.cards.begin(), user.cards.end(), [&](const Card &c){
-                    return c.cardNumber == destination;
-                });
-                if (cardIt != user.cards.end()) {
-                    auto linked = std::find_if(user.accounts.begin(), user.accounts.end(), [&](const Account &a){
+            } else if (auto cardIt = std::find_if(user.cards.begin(), user.cards.end(), [&](const Card &c){
+                           return c.cardNumber == destStr;
+                       }); cardIt != user.cards.end()) {
+                if (auto linked = std::find_if(user.accounts.begin(), user.accounts.end(), [&](const Account &a){
                         return a.accountNumber == cardIt->linkedAccount;
-                    });
-                    if (linked != user.accounts.end()) {
-                        long long newBalance = linked->balanceCents + deltaCents;
-                        if (newBalance < 0) newBalance = 0;
-                        linked->balanceCents = newBalance;
-                        changed = true;
-                    }
+                    }); linked != user.accounts.end()) {
+                    long long newBalance = linked->balanceCents + deltaCents;
+                    if (newBalance < 0) newBalance = 0;
+                    linked->balanceCents = newBalance;
+                    changed = true;
                 }
             }
 
@@ -811,7 +811,8 @@ bool BankController::adjustRecipientBalance(const std::string &destination, long
                 updated = true;
                 break;
             }
-        } catch (...) {
+        } catch (const BankingError &) {
+            Q_UNUSED(ownerUsername);
         }
     }
     return updated;
@@ -820,7 +821,7 @@ bool BankController::adjustRecipientBalance(const std::string &destination, long
 QVariantList BankController::listAllTransfers(const QString &query) const {
     QVariantList out;
     if (!isAdminLogin) return out;
-    std::string q = query.trimmed().toStdString();
+    auto q = query.trimmed();
     auto users = UserStorage::loadAll();
     for (const auto &u : users) {
         for (const auto &t : u.history) {
@@ -829,14 +830,20 @@ QVariantList BankController::listAllTransfers(const QString &query) const {
             m["id"] = QString::fromStdString(t.id);
             m["fromAccount"] = QString::fromStdString(t.fromAccount);
             m["toCard"] = QString::fromStdString(t.toCard);
-            m["cents"] = static_cast<qlonglong>(t.cents);
-            m["timestamp"] = static_cast<qlonglong>(t.timestamp);
+            m["cents"] = t.cents;
+            m["timestamp"] = t.timestamp;
             m["note"] = QString::fromStdString(t.note);
             m["status"] = QString::fromStdString(t.status);
             m["cancelReason"] = QString::fromStdString(t.cancelReason);
-            if (q.empty()) { out.push_back(m); continue; }
-            auto contains = [&](const std::string &s){ return s.find(q) != std::string::npos; };
-            if (contains(u.usernameValue) || contains(t.id) || contains(t.fromAccount) || contains(t.toCard) || contains(t.note) || contains(t.status) || contains(t.cancelReason)) {
+            if (q.isEmpty()) { out.push_back(m); continue; }
+            auto qsu = QString::fromStdString(u.usernameValue);
+            auto qid = QString::fromStdString(t.id);
+            auto qfrom = QString::fromStdString(t.fromAccount);
+            auto qto = QString::fromStdString(t.toCard);
+            auto qnote = QString::fromStdString(t.note);
+            auto qstatus = QString::fromStdString(t.status);
+            auto qreason = QString::fromStdString(t.cancelReason);
+            if (qsu.contains(q) || qid.contains(q) || qfrom.contains(q) || qto.contains(q) || qnote.contains(q) || qstatus.contains(q) || qreason.contains(q)) {
                 out.push_back(m);
             }
         }
