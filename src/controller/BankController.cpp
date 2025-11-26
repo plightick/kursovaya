@@ -8,21 +8,61 @@
 #include <algorithm>
 #include <chrono>
 #include <functional>
+#include <string_view>
 
 using namespace utils;
 using namespace storage;
 
 namespace {
-    Account* findAccount(RegularUser &u, const std::string &num) {
-        for (auto &a : u.accounts) if (a.accountNumber == num) return &a;
+    Account* findAccount(RegularUser &u, std::string_view num) {
+        const std::string key(num);
+        for (auto &a : u.accounts) if (a.accountNumber == key) return &a;
         return nullptr;
     }
-    Account* findLinkedAccount(RegularUser &u, const std::string &cardNum) {
-        for (const auto &c : u.cards) if (c.cardNumber == cardNum) {
-            for (auto &a : u.accounts) if (a.accountNumber == c.linkedAccount) return &a;
-            break;
+    Account* findLinkedAccount(RegularUser &u, std::string_view cardNum) {
+        const std::string key(cardNum);
+        for (const auto &c : u.cards) {
+            if (c.cardNumber == key) {
+                return findAccount(u, c.linkedAccount);
+            }
         }
         return nullptr;
+    }
+    bool cancelUserTx(RegularUser &user, std::string_view txId, std::string_view reason,
+                      std::string &outToCard, long long &outCents) {
+        for (auto &t : user.history) {
+            if (t.id != txId) continue;
+            if (t.status == "cancelled") throw ValidationError("Платеж уже отменен");
+            if (auto *acc = findAccount(user, t.fromAccount)) {
+                acc->balanceCents += t.cents;
+            }
+            t.status = "cancelled";
+            t.cancelReason = std::string(reason);
+            user.notifications.push_back("Платеж " + t.id + " отменен: " + std::string(reason));
+            outToCard = t.toCard;
+            outCents = t.cents;
+            UserStorage::saveUser(user);
+            return true;
+        }
+        return false;
+    }
+    void tryNotifyRecipient(std::string_view recipientName, std::string_view txId, std::string_view reason) {
+        try {
+            RegularUser recipient = UserStorage::loadUser(std::string(recipientName));
+            recipient.notifications.push_back(
+                "Платеж " + std::string(txId) + " отменен администратором. Причина: " + std::string(reason));
+            UserStorage::saveUser(recipient);
+        } catch (const BankingError &) {
+            return;
+        }
+    }
+    template <typename BuildFn>
+    bool buildIfFound(const RegularUser &u, std::string_view txId, const BuildFn &build, QVariantMap &out) {
+        const std::string key(txId);
+        for (const auto &t : u.history) {
+            if (t.id == key) { out = build(u, t); return true; }
+        }
+        return false;
     }
 }
 
@@ -40,15 +80,12 @@ void BankController::login(const QString &username, const QString &password) {
         if (uname.empty()) throw ValidationError("Username is empty");
 
         if (uname == "admin") {
-            if (password == "admin") {
-                isAdminLogin = true;
-                currentUser.reset();
-                emit authenticatedChanged();
-                emit infoMessage("Вход выполнен как администратор");
-                return;
-            } else {
-                throw AuthError("Неверный пароль администратора");
-            }
+            if (password != "admin") throw AuthError("Неверный пароль администратора");
+            isAdminLogin = true;
+            currentUser.reset();
+            emit authenticatedChanged();
+            emit infoMessage("Вход выполнен как администратор");
+            return;
         }
 
         RegularUser u = UserStorage::loadUser(uname);
@@ -517,14 +554,10 @@ QVariantMap BankController::receiptFor(const QString &transactionId) const {
 
     if (isAdminLogin) {
         for (const auto &user : UserStorage::loadAll()) {
-            for (const auto &t : user.history) {
-                if (t.id == txId) return build(user, t);
-            }
+            if (buildIfFound(user, txId, build, out)) return out;
         }
     } else if (currentUser) {
-        for (const auto &t : currentUser->history) {
-            if (t.id == txId) return build(*currentUser, t);
-        }
+        if (buildIfFound(*currentUser, txId, build, out)) return out;
     }
     return out;
 }
@@ -655,38 +688,19 @@ void BankController::cancelTransfer(const QString &transactionId, const QString 
         if (txId.empty()) throw ValidationError("Укажите платеж");
         if (reasonStd.empty()) throw ValidationError("Укажите причину отмены");
 
-        bool found = false;
         for (const auto &name : UserStorage::listUsernames()) {
             RegularUser user = UserStorage::loadUser(name);
-            Transaction *tx = nullptr;
-            for (auto &t : user.history) { if (t.id == txId) { tx = &t; break; } }
-            if (tx) {
-                if (tx->status == "cancelled") throw ValidationError("Платеж уже отменен");
-                Account *acc = nullptr;
-                for (auto &a : user.accounts) { if (a.accountNumber == tx->fromAccount) { acc = &a; break; } }
-                if (acc) acc->balanceCents += tx->cents;
-                tx->status = "cancelled";
-                tx->cancelReason = reasonStd;
-                user.notifications.push_back("Платеж " + tx->id + " отменен: " + reasonStd);
-                UserStorage::saveUser(user);
+            std::string toCard; long long cents = 0;
+            if (!cancelUserTx(user, txId, reasonStd, toCard, cents)) continue;
 
-                // снять деньги у получателя
-                std::string recipientName;
-                if (adjustRecipientBalance(tx->toCard, -tx->cents, &recipientName) && !recipientName.empty() && recipientName != user.usernameValue) {
-                    try {
-                        RegularUser recipient = UserStorage::loadUser(recipientName);
-                        recipient.notifications.push_back("Платеж " + tx->id + " отменен администратором. Причина: " + reasonStd);
-                        UserStorage::saveUser(recipient);
-                    } catch (const BankingError &) {
-                        recipientName.clear();
-                    }
-                }
-                found = true;
-                break;
+            if (std::string recipientName; adjustRecipientBalance(toCard, -cents, &recipientName)
+                    && !recipientName.empty() && recipientName != user.usernameValue) {
+                tryNotifyRecipient(recipientName, txId, reasonStd);
             }
+            emit infoMessage("Платеж отменен");
+            return;
         }
-        if (!found) throw NotFoundError("Платеж не найден");
-        emit infoMessage("Платеж отменен");
+        throw NotFoundError("Платеж не найден");
     } catch (const BankingError &e) {
         emit errorOccured(QString::fromStdString(e.what()));
     }

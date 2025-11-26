@@ -48,7 +48,7 @@ public:
         os << u.notifications.size() << "\n";
         for (const auto &n : u.notifications) {
             std::string copy = n;
-            std::replace(copy.begin(), copy.end(), '\n', ' ');
+            for (char &ch : copy) { if (ch == '\n') ch = ' '; }
             os << copy << "\n";
         }
         return os;

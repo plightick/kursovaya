@@ -28,8 +28,12 @@ public:
 
     friend std::ostream &operator<<(std::ostream &os, const Transaction &t) {
         auto sanitize = [](std::string value) {
-            std::replace(value.begin(), value.end(), '\n', ' ');
-            std::replace(value.begin(), value.end(), ',', ';');
+            for (char &ch : value) {
+                if (ch == '\n') ch = ' ';
+            }
+            for (char &ch : value) {
+                if (ch == ',') ch = ';';
+            }
             return value;
         };
         os << t.id << "," << t.fromAccount << "," << t.toCard << "," << t.cents << "," << t.timestamp << ","
@@ -43,7 +47,9 @@ public:
         std::stringstream ss(line);
         std::string field;
         auto desanitize = [](std::string value) {
-            std::replace(value.begin(), value.end(), ';', ',');
+            for (char &ch : value) {
+                if (ch == ';') ch = ',';
+            }
             return value;
         };
         std::getline(ss, t.id, ',');

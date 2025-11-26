@@ -10,7 +10,7 @@ namespace utils {
 
 inline std::string generateNumericId(std::size_t digits) {
     thread_local std::mt19937_64 rng{std::random_device{}()};
-    std::uniform_int_distribution<int> dist(0, 9);
+    std::uniform_int_distribution dist(0, 9);
     std::string out;
     out.reserve(digits);
     for (std::size_t i = 0; i < digits; ++i) {
