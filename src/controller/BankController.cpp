@@ -137,7 +137,7 @@ QString BankController::saveReceiptToFile(const QString &transactionId, const QS
     return m_transactionController->saveReceiptToFile(transactionId, filePath);
 }
 
-QString BankController::ratesText() const {
+const QString BankController::ratesText() const {
     try {
         std::filesystem::create_directories("data");
         auto path = std::filesystem::path("data/rates.txt");
@@ -202,57 +202,6 @@ bool BankController::isCardExpired(const QString &expiry) const {
     }
 }
 
-bool BankController::adjustRecipientBalance(std::string_view destination, long long deltaCents, std::string *ownerUsername) const {
-    const std::string destStr(destination);
-    for (const auto &name : UserStorage::listUsernames()) {
-        try {
-            RegularUser user = UserStorage::loadUser(name);
-            Account *acc = findAccount(user, destStr);
-            if (!acc) acc = findLinkedAccount(user, destStr);
-            if (!acc) continue;
-            long long newBalance = acc->balanceCents + deltaCents;
-            acc->balanceCents = newBalance < 0 ? 0 : newBalance;
-            UserStorage::saveUser(user);
-            if (ownerUsername) *ownerUsername = user.usernameValue;
-            return true;
-        } catch (const BankingError &) {
-            continue;
-        }
-    }
-    return false;
-}
 
-QVariantList BankController::listAllTransfers(const QString &query) const {
-    QVariantList out;
-    if (!isAdminLogin) return out;
-    auto q = query.trimmed();
-    auto users = UserStorage::loadAll();
-    for (const auto &u : users) {
-        for (const auto &t : u.history) {
-            QVariantMap m;
-            m["user"] = QString::fromStdString(u.usernameValue);
-            m["id"] = QString::fromStdString(t.id);
-            m["fromAccount"] = QString::fromStdString(t.fromAccount);
-            m["toCard"] = QString::fromStdString(t.toCard);
-            m["cents"] = t.cents;
-            m["timestamp"] = t.timestamp;
-            m["note"] = QString::fromStdString(t.note);
-            m["status"] = QString::fromStdString(t.status);
-            m["cancelReason"] = QString::fromStdString(t.cancelReason);
-            if (q.isEmpty()) { out.push_back(m); continue; }
-            auto qsu = QString::fromStdString(u.usernameValue);
-            auto qid = QString::fromStdString(t.id);
-            auto qfrom = QString::fromStdString(t.fromAccount);
-            auto qto = QString::fromStdString(t.toCard);
-            auto qnote = QString::fromStdString(t.note);
-            auto qstatus = QString::fromStdString(t.status);
-            auto qreason = QString::fromStdString(t.cancelReason);
-            if (qsu.contains(q) || qid.contains(q) || qfrom.contains(q) || qto.contains(q) || qnote.contains(q) || qstatus.contains(q) || qreason.contains(q)) {
-                out.push_back(m);
-            }
-        }
-    }
-    return out;
-}
 
 

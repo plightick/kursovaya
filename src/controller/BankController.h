@@ -62,7 +62,5 @@ private:
     AccountController *m_accountController = nullptr;
     TransactionController *m_transactionController = nullptr;
     AdminController *m_adminController = nullptr;
-};
-};
 
 
