@@ -15,6 +15,7 @@ public:
         return os;
     }
 
+    
     friend std::istream &operator>>(std::istream &is, Card &c) {
         std::getline(is, c.cardNumber, ',');
         std::getline(is, c.holderName, ',');
