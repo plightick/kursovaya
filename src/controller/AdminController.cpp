@@ -18,8 +18,8 @@ namespace {
 
     bool cancelUserTx(RegularUser &user, std::string_view txId, std::string_view reason,
                       std::string &outToCard, long long &outCents) {
-        auto it = std::find_if(user.history.begin(), user.history.end(),
-                               [txId](const Transaction& t) { return t.id == txId; });
+        auto it = std::ranges::find_if(user.history,
+                                   [txId](const Transaction& t) { return t.id == txId; });
 
         if (it == user.history.end()) {
             return false;
@@ -53,31 +53,29 @@ namespace {
         }
     }
 
-    bool adjustRecipientBalance(std::string_view destination, long long deltaCents, std::string *ownerUsername = nullptr) {
-        for (const auto &name : UserStorage::listUsernames()) {
-            RegularUser u = UserStorage::loadUser(name);
-            Account *linked = nullptr;
-            for (const auto &c : u.cards) {
-                if (c.cardNumber == destination) {
-                    for (auto &a : u.accounts) {
-                        if (a.accountNumber == c.linkedAccount) {
-                            linked = &a;
-                            break;
-                        }
-                    }
-                    break;
-                }
-            }
-
-            if (linked) {
-                linked->balanceCents += deltaCents;
-                if (ownerUsername) *ownerUsername = u.usernameValue;
-                UserStorage::saveUser(u);
-                return true;
-            }
+    namespace {
+    Account* findAccountByCard(RegularUser& user, std::string_view cardNum) {
+        auto cardIt = std::ranges::find_if(user.cards, [cardNum](const Card& card) { return card.cardNumber == cardNum; });
+        if (cardIt == user.cards.end()) {
+            return nullptr;
         }
-        return false;
+        auto accIt = std::ranges::find_if(user.accounts, [&cardIt](const Account& acc) { return acc.accountNumber == cardIt->linkedAccount; });
+        return (accIt == user.accounts.end()) ? nullptr : &*accIt;
     }
+}
+
+bool adjustRecipientBalance(std::string_view destination, long long deltaCents, std::string *ownerUsername = nullptr) {
+    for (const auto &name : UserStorage::listUsernames()) {
+        RegularUser u = UserStorage::loadUser(name);
+        if (Account *linked = findAccountByCard(u, destination)) {
+            linked->balanceCents += deltaCents;
+            if (ownerUsername) *ownerUsername = u.usernameValue;
+            UserStorage::saveUser(u);
+            return true;
+        }
+    }
+    return false;
+}
 }
 
 AdminController::AdminController(QObject *parent) : QObject(parent) {}
