@@ -3,6 +3,8 @@
 #include "AccountController.h"
 #include "TransactionController.h"
 #include "AdminController.h"
+#include "UserController.h"
+#include "NotificationController.h"
 #include "storage/UserStorage.h"
 #include "utils/Exceptions.h"
 #include "utils/Utils.h"
@@ -21,6 +23,10 @@ BankController::BankController(QObject *parent)
     connect(m_authController, &AuthController::authenticatedChanged, this, &BankController::onAuthenticatedChanged);
     connect(m_authController, &AuthController::errorOccured, this, &BankController::errorOccured);
     connect(m_authController, &AuthController::infoMessage, this, &BankController::infoMessage);
+
+    m_userController = new UserController(this);
+    connect(m_userController, &UserController::errorOccured, this, &BankController::errorOccured);
+    connect(m_userController, &UserController::infoMessage, this, &BankController::infoMessage);
 }
 
 void BankController::login(const QString &username, const QString &password) {
@@ -54,12 +60,17 @@ void BankController::onAuthenticatedChanged() {
     m_transactionController = nullptr;
     delete m_adminController;
     m_adminController = nullptr;
+    delete m_notificationController;
+    m_notificationController = nullptr;
 
     if (m_authController->isAuthenticated()) {
         if (m_authController->isAdmin()) {
             m_adminController = new AdminController(this);
             connect(m_adminController, &AdminController::errorOccured, this, &BankController::errorOccured);
             connect(m_adminController, &AdminController::infoMessage, this, &BankController::infoMessage);
+            m_notificationController = new NotificationController(m_authController->getCurrentUser(), this);
+            connect(m_notificationController, &NotificationController::errorOccured, this, &BankController::errorOccured);
+            connect(m_notificationController, &NotificationController::infoMessage, this, &BankController::infoMessage);
         } else {
             m_accountController = new AccountController(m_authController->getCurrentUser(), this);
             m_transactionController = new TransactionController(m_authController->getCurrentUser(), this);
@@ -67,6 +78,9 @@ void BankController::onAuthenticatedChanged() {
             connect(m_accountController, &AccountController::infoMessage, this, &BankController::infoMessage);
             connect(m_transactionController, &TransactionController::errorOccured, this, &BankController::errorOccured);
             connect(m_transactionController, &TransactionController::infoMessage, this, &BankController::infoMessage);
+            m_notificationController = new NotificationController(m_authController->getCurrentUser(), this);
+            connect(m_notificationController, &NotificationController::errorOccured, this, &BankController::errorOccured);
+            connect(m_notificationController, &NotificationController::infoMessage, this, &BankController::infoMessage);
         }
     }
     emit authenticatedChanged();
@@ -142,89 +156,6 @@ QString BankController::saveReceiptToFile(const QString &transactionId, const QS
     return m_transactionController->saveReceiptToFile(transactionId, filePath);
 }
 
-QVariantList BankController::listUserCards(const QString &username) const
-{
-    if (!m_adminController) return {};
-    return m_adminController->listUserCards(username);
-}
-
-QVariantList BankController::listUserAccounts(const QString &username) const
-{
-    if (!m_adminController) return {};
-    return m_adminController->listUserAccounts(username);
-}
-
-QVariantList BankController::listNotifications() const
-{
-    if (!m_accountController) return {};
-    return m_accountController->listNotifications();
-}
-
-void BankController::clearNotifications()
-{
-    if (!m_accountController) return;
-    m_accountController->clearNotifications();
-}
-
-void BankController::setAccountBalance(const QString &accountNumber, qlonglong cents)
-{
-    if (!m_adminController) return;
-    m_adminController->setAccountBalance(accountNumber, cents);
-}
-
-QVariantList BankController::listAllTransfers(const QString &query) const
-{
-    if (!m_adminController) return {};
-    return m_adminController->listAllTransfers(query);
-}
-
-void BankController::cancelTransfer(const QString &transactionId, const QString &reason)
-{
-    if (!m_adminController) return;
-    m_adminController->cancelTransfer(transactionId, reason);
-}
-
-void BankController::clearAllUsers()
-{
-    if (!m_adminController) return;
-    m_adminController->clearAllUsers();
-}
-
-QStringList BankController::listUsers() const
-{
-    if (!m_adminController) return {};
-    return m_adminController->listUsers();
-}
-
-QStringList BankController::searchUsers(const QString &query) const
-{
-    if (!m_adminController) return {};
-    return m_adminController->searchUsers(query);
-}
-
-QStringList BankController::sortUsersByAccountCount() const
-{
-    if (!m_adminController) return {};
-    return m_adminController->sortUsersByAccountCount();
-}
-
-QStringList BankController::sortUsers(const QString &sortBy) const
-{
-    if (!m_adminController) return {};
-    return m_adminController->sortUsers(sortBy);
-}
-
-QVariantList BankController::getAllUsersInfo(const QString &sortBy) const
-{
-    if (!m_adminController) return {};
-    return m_adminController->getAllUsersInfo(sortBy);
-}
-
-QVariantList BankController::sortTransfers(const QString &sortBy) const
-{
-    if (!m_adminController) return {};
-    return m_adminController->sortTransfers(sortBy);
-}
 
 QString BankController::ratesText() const {
     try {

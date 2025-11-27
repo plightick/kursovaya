@@ -20,6 +20,8 @@ class AuthController;
 class AccountController;
 class TransactionController;
 class AdminController;
+class UserController;
+class NotificationController;
 
 class BankController : public QObject {
     Q_OBJECT
@@ -39,8 +41,6 @@ public:
     Q_INVOKABLE QVariantList listCards() const;
     Q_INVOKABLE QVariantList listHistory() const;
     Q_INVOKABLE QVariantList listFavorites() const;
-    Q_INVOKABLE QVariantList listUserCards(const QString &username) const; // any user by name
-    Q_INVOKABLE QVariantList listUserAccounts(const QString &username) const; // any user by name
 
     Q_INVOKABLE void addAccount(const QString &currency);
     Q_INVOKABLE void addCard([[maybe_unused]] const QString &holderName, const QString &expiry, const QString &linkedAccount);
@@ -54,8 +54,6 @@ public:
     Q_INVOKABLE QString downloadReceipt(const QString &transactionId);
     Q_INVOKABLE QString saveReceiptToFile(const QString &transactionId, const QString &filePath);
 
-    Q_INVOKABLE QVariantList listNotifications() const;
-    Q_INVOKABLE void clearNotifications();
 
     Q_INVOKABLE void setAccountBalance(const QString &accountNumber, qlonglong cents);
 
@@ -63,11 +61,6 @@ public:
     Q_INVOKABLE void cancelTransfer(const QString &transactionId, const QString &reason);
     Q_INVOKABLE void clearAllUsers();
 
-    Q_INVOKABLE QStringList listUsers() const;
-    Q_INVOKABLE QStringList searchUsers(const QString &query) const;
-    Q_INVOKABLE QStringList sortUsersByAccountCount() const;
-    Q_INVOKABLE QStringList sortUsers(const QString &sortBy) const; // "accounts", "cards", "transactions", "name"
-    Q_INVOKABLE QVariantList getAllUsersInfo(const QString &sortBy = "") const; // Returns full user info with accounts, cards, transactions count
     Q_INVOKABLE QVariantList sortTransfers(const QString &sortBy) const; // "user", "amount", "date", "status"
 
     Q_INVOKABLE QString ratesText() const;
@@ -90,4 +83,6 @@ private:
     AccountController *m_accountController = nullptr;
     TransactionController *m_transactionController = nullptr;
     AdminController *m_adminController = nullptr;
+    UserController *m_userController = nullptr;
+    NotificationController *m_notificationController = nullptr;
 };

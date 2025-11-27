@@ -15,7 +15,9 @@ SOURCES += \
     src/controller/AuthController.cpp \
     src/controller/AccountController.cpp \
     src/controller/TransactionController.cpp \
-    src/controller/AdminController.cpp
+    src/controller/AdminController.cpp \
+    src/controller/UserController.cpp \
+    src/controller/NotificationController.cpp
 
 # Заголовочные файлы
 HEADERS += \
@@ -24,6 +26,8 @@ HEADERS += \
     src/controller/AccountController.h \
     src/controller/TransactionController.h \
     src/controller/AdminController.h \
+    src/controller/UserController.h \
+    src/controller/NotificationController.h \
     src/models/Account.h \
     src/models/Card.h \
     src/models/FavoritePayment.h \
