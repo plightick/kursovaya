@@ -619,10 +619,11 @@ QVariantMap BankController::getExpenseStats() const {
     for (const auto &t : currentUser->history) {
         if (!(t.cents > 0 && t.status == "completed")) continue;
         // Учитываем только исходящие переводы (не пополнения)
-        const bool isOutgoing = std::ranges::any_of(currentUser->accounts, [&](const Account &acc){
-            return acc.accountNumber == t.fromAccount;
-        });
-        if (!isOutgoing) continue;
+        if (const bool isOutgoing = std::ranges::any_of(currentUser->accounts, [&](const Account &acc){
+                return acc.accountNumber == t.fromAccount;
+            }); !isOutgoing) {
+            continue;
+        }
         std::string cat = t.category.empty() ? "other" : t.category;
         categoryTotals[cat] += t.cents;
     }
