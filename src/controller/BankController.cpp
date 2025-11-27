@@ -173,6 +173,48 @@ QString BankController::ratesText() const {
     }
 }
 
+void BankController::setAccountBalance(const QString &accountNumber, qlonglong cents) {
+    if (!m_adminController) {
+        emit errorOccured("Доступ запрещен");
+        return;
+    }
+    m_adminController->setAccountBalance(accountNumber, cents);
+}
+
+QVariantList BankController::listAllTransfers(const QString &query) const {
+    QVariantList out;
+    if (!m_adminController) {
+        emit const_cast<BankController*>(this)->errorOccured("Доступ запрещен");
+        return out;
+    }
+    return m_adminController->listAllTransfers(query);
+}
+
+void BankController::cancelTransfer(const QString &transactionId, const QString &reason) {
+    if (!m_adminController) {
+        emit errorOccured("Доступ запрещен");
+        return;
+    }
+    m_adminController->cancelTransfer(transactionId, reason);
+}
+
+void BankController::clearAllUsers() {
+    if (!m_adminController) {
+        emit errorOccured("Доступ запрещен");
+        return;
+    }
+    m_adminController->clearAllUsers();
+}
+
+QVariantList BankController::sortTransfers(const QString &sortBy) const {
+    QVariantList out;
+    if (!m_adminController) {
+        emit const_cast<BankController*>(this)->errorOccured("Доступ запрещен");
+        return out;
+    }
+    return m_adminController->sortTransfers(sortBy);
+}
+
 bool BankController::isCardExpired(const QString &expiry) const {
     try {
         if (expiry.isEmpty() || expiry.length() < 5) {
