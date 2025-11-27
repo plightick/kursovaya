@@ -15,6 +15,8 @@ class BankController : public QObject {
 public:
     explicit BankController(QObject *parent = nullptr);
 
+    Q_INVOKABLE void seedAdmin() const;
+
     // Auth methods
     Q_INVOKABLE void login(const QString &username, const QString &password);
     Q_INVOKABLE void logout();

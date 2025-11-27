@@ -8,6 +8,10 @@
 
 using namespace utils;
 
+void BankController::seedAdmin() const {
+    storage::UserStorage::ensureDataDirs();
+}
+
 BankController::BankController(QObject *parent) : QObject(parent) {
     connect(&m_authController, &AuthController::authenticatedChanged, this, &BankController::onAuthenticatedChanged);
     connect(&m_authController, &AuthController::errorOccured, this, &BankController::errorOccured);
@@ -132,13 +136,6 @@ QString BankController::saveReceiptToFile(const QString &transactionId, const QS
     if (!m_transactionController) return {};
     return m_transactionController->saveReceiptToFile(transactionId, filePath);
 }
-
-void BankController::setAccountBalance(const QString &accountNumber, qlonglong cents) {
-    emit errorOccured(QStringLiteral("Нельзя напрямую установить баланс для счета %1. Используйте пополнение на %2 коп.")
-                          .arg(accountNumber)
-                          .arg(cents));
-}
-
 
 QString BankController::ratesText() const {
     try {

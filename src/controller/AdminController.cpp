@@ -60,7 +60,7 @@ namespace {
             return nullptr;
         }
         auto accIt = std::ranges::find_if(user.accounts, [&cardIt](const Account& acc) { return acc.accountNumber == cardIt->linkedAccount; });
-        return (accIt == user.accounts.end()) ? nullptr : &*accIt;
+        return (accIt == user.accounts.end()) ? nullptr : std::to_address(accIt);
     }
 }
 
