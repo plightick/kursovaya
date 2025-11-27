@@ -7,7 +7,7 @@ int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
 
-    BankController controller; // stack-allocated, lifetime tied to this scope
+    BankController controller; 
     QQmlApplicationEngine engine;
     controller.seedAdmin();
     engine.rootContext()->setContextProperty("bank", &controller);

@@ -11,7 +11,7 @@ class Transaction : public Payment {
 public:
     std::string id;            // unique
     std::string fromAccount;   // account number
-    std::string toCard;        // destination card or account
+    std::string toCard;        
     long long cents = 0;
     std::time_t timestamp = 0;
     std::string note;

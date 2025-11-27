@@ -530,7 +530,7 @@ QVariantList BankController::sortTransfers(const QString &sortBy) const {
     else if (key == "date" || key == "дата") cmp = byDate;
     else if (key == "status" || key == "статус") cmp = byStatus;
 
-    std::sort(transfers.begin(), transfers.end(), cmp);
+    std::ranges::sort(transfers, cmp);
     for (const auto &m : transfers) out.push_back(m);
     return out;
 }

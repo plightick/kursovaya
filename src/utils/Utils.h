@@ -3,8 +3,7 @@
 #include <string>
 #include <string_view>
 #include <random>
-#include <sstream>
-#include <iomanip>
+#include <format>
 
 namespace utils {
 
@@ -29,9 +28,7 @@ inline std::string trim(std::string_view s) {
 inline std::string weakHash(std::string_view input) {
     std::hash<std::string_view> hasher;
     auto h = hasher(input);
-    std::stringstream ss;
-    ss << std::hex << std::setw(16) << std::setfill('0') << h;
-    return ss.str();
+    return std::format("{:016x}", h);
 }
 
 }
