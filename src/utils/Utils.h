@@ -4,6 +4,7 @@
 #include <string_view>
 #include <random>
 #include <format>
+#include <functional>
 
 namespace utils {
 
@@ -17,6 +18,19 @@ inline std::string generateNumericId(std::size_t digits) {
     }
     return out;
 }
+
+struct TransparentStringHash {
+    using is_transparent = void;
+    std::size_t operator()(std::string_view s) const noexcept {
+        return std::hash<std::string_view>{}(s);
+    }
+    std::size_t operator()(const std::string &s) const noexcept {
+        return std::hash<std::string_view>{}(s);
+    }
+    std::size_t operator()(const char *s) const noexcept {
+        return std::hash<std::string_view>{}(s);
+    }
+};
 
 inline std::string trim(std::string_view s) {
     std::size_t start = s.find_first_not_of(" \t\n\r");

@@ -9,6 +9,8 @@
 #include <chrono>
 #include <functional>
 #include <string_view>
+#include <unordered_map>
+#include <map>
 
 using namespace utils;
 using namespace storage;
@@ -363,7 +365,7 @@ QStringList BankController::sortUsersByAccountCount() const {
     QStringList out;
     if (!isAdminLogin) return out;
     auto users = UserStorage::loadAll();
-    std::sort(users.begin(), users.end(), [](const RegularUser &a, const RegularUser &b){
+    std::ranges::sort(users, [](const RegularUser &a, const RegularUser &b){
         if (a.accounts.size() == b.accounts.size()) return a.usernameValue < b.usernameValue;
         return a.accounts.size() < b.accounts.size();
     });
@@ -376,23 +378,23 @@ QStringList BankController::sortUsers(const QString &sortBy) const {
     if (!isAdminLogin) return out;
     auto users = UserStorage::loadAll();
     if (auto sortKey = sortBy.trimmed().toLower().toStdString(); sortKey == "accounts" || sortKey == "счета") {
-        std::sort(users.begin(), users.end(), [](const RegularUser &a, const RegularUser &b){
+        std::ranges::sort(users, [](const RegularUser &a, const RegularUser &b){
             if (a.accounts.size() == b.accounts.size()) return a.usernameValue < b.usernameValue;
             return a.accounts.size() < b.accounts.size();
         });
     } else if (sortKey == "cards" || sortKey == "карты") {
-        std::sort(users.begin(), users.end(), [](const RegularUser &a, const RegularUser &b){
+        std::ranges::sort(users, [](const RegularUser &a, const RegularUser &b){
             if (a.cards.size() == b.cards.size()) return a.usernameValue < b.usernameValue;
             return a.cards.size() < b.cards.size();
         });
     } else if (sortKey == "transactions" || sortKey == "транзакции" || sortKey == "переводы") {
-        std::sort(users.begin(), users.end(), [](const RegularUser &a, const RegularUser &b){
+        std::ranges::sort(users, [](const RegularUser &a, const RegularUser &b){
             if (a.history.size() == b.history.size()) return a.usernameValue < b.usernameValue;
             return a.history.size() < b.history.size();
         });
     } else {
         // По умолчанию сортировка по имени
-        std::sort(users.begin(), users.end(), [](const RegularUser &a, const RegularUser &b){
+        std::ranges::sort(users, [](const RegularUser &a, const RegularUser &b){
             return a.usernameValue < b.usernameValue;
         });
     }
@@ -408,23 +410,23 @@ QVariantList BankController::getAllUsersInfo(const QString &sortBy) const {
     auto users = UserStorage::loadAll();
     // Сортировка
     if (auto sortKey = sortBy.trimmed().toLower().toStdString(); sortKey == "accounts" || sortKey == "счета") {
-        std::sort(users.begin(), users.end(), [](const RegularUser &a, const RegularUser &b){
+        std::ranges::sort(users, [](const RegularUser &a, const RegularUser &b){
             if (a.accounts.size() == b.accounts.size()) return a.usernameValue < b.usernameValue;
             return a.accounts.size() < b.accounts.size();
         });
     } else if (sortKey == "cards" || sortKey == "карты") {
-        std::sort(users.begin(), users.end(), [](const RegularUser &a, const RegularUser &b){
+        std::ranges::sort(users, [](const RegularUser &a, const RegularUser &b){
             if (a.cards.size() == b.cards.size()) return a.usernameValue < b.usernameValue;
             return a.cards.size() < b.cards.size();
         });
     } else if (sortKey == "transactions" || sortKey == "транзакции" || sortKey == "переводы") {
-        std::sort(users.begin(), users.end(), [](const RegularUser &a, const RegularUser &b){
+        std::ranges::sort(users, [](const RegularUser &a, const RegularUser &b){
             if (a.history.size() == b.history.size()) return a.usernameValue < b.usernameValue;
             return a.history.size() < b.history.size();
         });
     } else {
         // По умолчанию сортировка по имени
-        std::sort(users.begin(), users.end(), [](const RegularUser &a, const RegularUser &b){
+        std::ranges::sort(users, [](const RegularUser &a, const RegularUser &b){
             return a.usernameValue < b.usernameValue;
         });
     }
@@ -613,26 +615,20 @@ QVariantMap BankController::getExpenseStats() const {
     QVariantMap stats;
     if (!currentUser) return stats;
     
-    std::unordered_map<std::string, long long> categoryTotals;
+    std::unordered_map<std::string, long long, TransparentStringHash, std::equal_to<>> categoryTotals;
     for (const auto &t : currentUser->history) {
-        if (t.cents > 0 && t.status == "completed") {
-            // Учитываем только исходящие переводы (не пополнения)
-            // Пополнения имеют fromAccount как внешний счет, а toCard как наш счет
-            bool isOutgoing = false;
-            for (const auto &acc : currentUser->accounts) {
-                if (acc.accountNumber == t.fromAccount) {
-                    isOutgoing = true;
-                    break;
-                }
-            }
-            if (isOutgoing) {
-                categoryTotals[t.category.empty() ? "other" : t.category] += t.cents;
-            }
-        }
+        if (!(t.cents > 0 && t.status == "completed")) continue;
+        // Учитываем только исходящие переводы (не пополнения)
+        const bool isOutgoing = std::ranges::any_of(currentUser->accounts, [&](const Account &acc){
+            return acc.accountNumber == t.fromAccount;
+        });
+        if (!isOutgoing) continue;
+        std::string cat = t.category.empty() ? "other" : t.category;
+        categoryTotals[cat] += t.cents;
     }
     
     // Преобразуем в QVariantMap с русскими названиями
-    std::map<std::string, QString> categoryNames = {
+    std::map<std::string, QString, std::less<>> categoryNames = {
         {"medicine", "Медицина и здравоохранение"},
         {"sport", "Спорт"},
         {"food", "Продукты"},
@@ -647,7 +643,7 @@ QVariantMap BankController::getExpenseStats() const {
     
     QVariantMap result;
     for (const auto &[key, name] : categoryNames) {
-        long long amount = categoryTotals.count(key) ? categoryTotals[key] : 0;
+        long long amount = categoryTotals.contains(key) ? categoryTotals.at(key) : 0;
         QVariantMap catData;
         catData["name"] = name;
         catData["amount"] = amount;
