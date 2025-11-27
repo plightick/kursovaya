@@ -127,7 +127,7 @@ void TransactionController::depositToAccount(const QString &accountNumber, qlong
 
 QVariantMap TransactionController::getExpenseStats() const {
     QVariantMap stats;
-    std::unordered_map<std::string, long long> categoryTotals;
+    std::unordered_map<std::string, long long, utils::TransparentStringHash, std::equal_to<>> categoryTotals;
     for (const auto &t : currentUser.history) {
         if (!(t.cents > 0 && t.status == "completed")) continue;
         bool isOutgoing = false;
@@ -229,23 +229,25 @@ void TransactionController::saveCurrentUser() {
     UserStorage::saveUser(currentUser);
 }
 
+namespace {
+    Account* findAccountByCard(RegularUser& user, std::string_view cardNum) {
+        for (const auto& card : user.cards) {
+            if (card.cardNumber == cardNum) {
+                for (auto& account : user.accounts) {
+                    if (account.accountNumber == card.linkedAccount) {
+                        return &account;
+                    }
+                }
+            }
+        }
+        return nullptr;
+    }
+}
+
 bool TransactionController::adjustRecipientBalance(std::string_view destination, long long deltaCents, std::string *ownerUsername) const {
     for (const auto &name : UserStorage::listUsernames()) {
         RegularUser u = UserStorage::loadUser(name);
-        Account *linked = nullptr;
-        for (const auto &c : u.cards) {
-            if (c.cardNumber == destination) {
-                for (auto &a : u.accounts) {
-                    if (a.accountNumber == c.linkedAccount) {
-                        linked = &a;
-                        break;
-                    }
-                }
-                break;
-            }
-        }
-
-        if (linked) {
+        if (Account *linked = findAccountByCard(u, destination)) {
             linked->balanceCents += deltaCents;
             if (ownerUsername) *ownerUsername = u.usernameValue;
             UserStorage::saveUser(u);

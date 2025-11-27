@@ -107,15 +107,16 @@ void AdminController::cancelTransfer(const QString &transactionId, const QString
 
         for (const auto &name : UserStorage::listUsernames()) {
             RegularUser user = UserStorage::loadUser(name);
-            std::string toCard; long long cents = 0;
-            if (!cancelUserTx(user, txId, reasonStd, toCard, cents)) continue;
-
-            if (std::string recipientName; adjustRecipientBalance(toCard, -cents, &recipientName)
-                    && !recipientName.empty() && recipientName != user.usernameValue) {
-                tryNotifyRecipient(recipientName, txId, reasonStd);
+            std::string toCard;
+            long long cents = 0;
+            if (cancelUserTx(user, txId, reasonStd, toCard, cents)) {
+                std::string recipientName;
+                if (adjustRecipientBalance(toCard, -cents, &recipientName) && !recipientName.empty() && recipientName != user.usernameValue) {
+                    tryNotifyRecipient(recipientName, txId, reasonStd);
+                }
+                emit infoMessage("Платеж отменен");
+                return;
             }
-            emit infoMessage("Платеж отменен");
-            return;
         }
         throw NotFoundError("Платеж не найден");
     } catch (const BankingError &e) {
@@ -156,7 +157,7 @@ QStringList AdminController::searchUsers(const QString &query) const {
 QStringList AdminController::sortUsersByAccountCount() const {
     QStringList out;
     auto users = UserStorage::loadAll();
-    std::sort(users.begin(), users.end(), [](const RegularUser &a, const RegularUser &b){
+    std::ranges::sort(users, [](const RegularUser &a, const RegularUser &b){
         if (a.accounts.size() == b.accounts.size()) return a.usernameValue < b.usernameValue;
         return a.accounts.size() < b.accounts.size();
     });
@@ -168,22 +169,22 @@ QStringList AdminController::sortUsers(const QString &sortBy) const {
     QStringList out;
     auto users = UserStorage::loadAll();
     if (auto sortKey = sortBy.trimmed().toLower().toStdString(); sortKey == "accounts" || sortKey == "счета") {
-        std::sort(users.begin(), users.end(), [](const RegularUser &a, const RegularUser &b){
+        std::ranges::sort(users, [](const RegularUser &a, const RegularUser &b){
             if (a.accounts.size() == b.accounts.size()) return a.usernameValue < b.usernameValue;
             return a.accounts.size() < b.accounts.size();
         });
     } else if (sortKey == "cards" || sortKey == "карты") {
-        std::sort(users.begin(), users.end(), [](const RegularUser &a, const RegularUser &b){
+        std::ranges::sort(users, [](const RegularUser &a, const RegularUser &b){
             if (a.cards.size() == b.cards.size()) return a.usernameValue < b.usernameValue;
             return a.cards.size() < b.cards.size();
         });
     } else if (sortKey == "transactions" || sortKey == "транзакции" || sortKey == "переводы") {
-        std::sort(users.begin(), users.end(), [](const RegularUser &a, const RegularUser &b){
+        std::ranges::sort(users, [](const RegularUser &a, const RegularUser &b){
             if (a.history.size() == b.history.size()) return a.usernameValue < b.usernameValue;
             return a.history.size() < b.history.size();
         });
     } else {
-        std::sort(users.begin(), users.end(), [](const RegularUser &a, const RegularUser &b){
+        std::ranges::sort(users, [](const RegularUser &a, const RegularUser &b){
             return a.usernameValue < b.usernameValue;
         });
     }
@@ -192,7 +193,7 @@ QStringList AdminController::sortUsers(const QString &sortBy) const {
     return out;
 }
 
-QVariantList AdminController::getAllUsersInfo(const QString &sortBy) const {
+QVariantList AdminController::getAllUsersInfo([[maybe_unused]] const QString &sortBy) const {
     QVariantList out;
     auto users = UserStorage::loadAll();
     // Sorting logic here...
@@ -207,7 +208,7 @@ QVariantList AdminController::getAllUsersInfo(const QString &sortBy) const {
     return out;
 }
 
-QVariantList AdminController::sortTransfers(const QString &sortBy) const {
+QVariantList AdminController::sortTransfers([[maybe_unused]] const QString &sortBy) const {
     QVariantList out;
     // Sorting logic here...
     return out;

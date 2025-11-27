@@ -139,35 +139,6 @@ void BankController::setAccountBalance(const QString &accountNumber, qlonglong c
                           .arg(cents));
 }
 
-QVariantList BankController::listAllTransfers(const QString &query) const {
-    if (!m_adminController) return {};
-    return m_adminController->listAllTransfers(query);
-}
-
-void BankController::cancelTransfer(const QString &transactionId, const QString &reason) {
-    if (!m_adminController) return;
-    m_adminController->cancelTransfer(transactionId, reason);
-}
-
-void BankController::clearAllUsers() {
-    if (!m_adminController) return;
-    m_adminController->clearAllUsers();
-}
-
-QStringList BankController::listUsers() const {
-    if (!m_adminController) return {};
-    return m_adminController->listUsers();
-}
-
-QStringList BankController::searchUsers(const QString &query) const {
-    if (!m_adminController) return {};
-    return m_adminController->searchUsers(query);
-}
-
-QVariantList BankController::getAllUsersInfo(const QString &sortBy) const {
-    if (!m_adminController) return {};
-    return m_adminController->getAllUsersInfo(sortBy);
-}
 
 QString BankController::ratesText() const {
     try {

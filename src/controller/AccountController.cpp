@@ -47,7 +47,7 @@ void AccountController::addAccount(const QString &currency) {
     }
 }
 
-void AccountController::addCard(const QString &holderName, const QString &expiry, const QString &linkedAccount) {
+void AccountController::addCard([[maybe_unused]] const QString &holderName, const QString &expiry, const QString &linkedAccount) {
     try {
         bool accountExists = false;
         const std::string accId = linkedAccount.toStdString();

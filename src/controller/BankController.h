@@ -38,16 +38,9 @@ public:
     Q_INVOKABLE QString downloadReceipt(const QString &transactionId);
     Q_INVOKABLE QString saveReceiptToFile(const QString &transactionId, const QString &filePath);
 
-    // Admin methods
-    Q_INVOKABLE QVariantList listAllTransfers(const QString &query) const;
-    Q_INVOKABLE void cancelTransfer(const QString &transactionId, const QString &reason);
-    Q_INVOKABLE void clearAllUsers();
-    Q_INVOKABLE QStringList listUsers() const;
-    Q_INVOKABLE QStringList searchUsers(const QString &query) const;
-    Q_INVOKABLE QVariantList getAllUsersInfo(const QString &sortBy = "") const;
 
     // Other methods
-    Q_INVOKABLE QString ratesText() const;
+    Q_INVOKABLE const QString ratesText() const;
     Q_INVOKABLE bool isCardExpired(const QString &expiry) const;
 
     bool isAuthenticated() const;
