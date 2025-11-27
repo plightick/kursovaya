@@ -62,7 +62,7 @@ public:
             auto name = entry.path().stem().string();
             names.push_back(name);
         }
-        std::ranges::sort(names);
+        std::sort(names.begin(), names.end());
         return names;
     }
 

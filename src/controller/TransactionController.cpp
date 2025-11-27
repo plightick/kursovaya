@@ -21,7 +21,7 @@ QVariantList TransactionController::listHistory() const {
         m["fromAccount"] = QString::fromStdString(t.fromAccount);
         m["toCard"] = QString::fromStdString(t.toCard);
         m["cents"] = t.cents;
-        m["timestamp"] = t.timestamp;
+        m["timestamp"] = static_cast<qint64>(t.timestamp);
         m["note"] = QString::fromStdString(t.note);
         m["status"] = QString::fromStdString(t.status);
         m["cancelReason"] = QString::fromStdString(t.cancelReason);
@@ -169,7 +169,7 @@ QVariantMap TransactionController::receiptFor(const QString &transactionId) cons
             out["fromAccount"] = QString::fromStdString(t.fromAccount);
             out["toCard"] = QString::fromStdString(t.toCard);
             out["cents"] = t.cents;
-            out["timestamp"] = t.timestamp;
+            out["timestamp"] = static_cast<qint64>(t.timestamp);
             out["note"] = QString::fromStdString(t.note);
             out["status"] = QString::fromStdString(t.status);
             out["cancelReason"] = QString::fromStdString(t.cancelReason);
@@ -231,15 +231,15 @@ void TransactionController::saveCurrentUser() {
 
 namespace {
     Account* findAccountByCard(RegularUser& user, std::string_view cardNum) {
-        auto cardIt = std::ranges::find_if(user.cards, [cardNum](const Card& card) { return card.cardNumber == cardNum; });
+        auto cardIt = std::find_if(user.cards.begin(), user.cards.end(), [cardNum](const Card& card) { return card.cardNumber == cardNum; });
 
         if (cardIt == user.cards.end()) {
             return nullptr;
         }
 
-        auto accIt = std::ranges::find_if(user.accounts, [&cardIt](const Account& acc) { return acc.accountNumber == cardIt->linkedAccount; });
+        auto accIt = std::find_if(user.accounts.begin(), user.accounts.end(), [&cardIt](const Account& acc) { return acc.accountNumber == cardIt->linkedAccount; });
 
-        return (accIt == user.accounts.end()) ? nullptr : std::to_address(accIt);
+        return (accIt == user.accounts.end()) ? nullptr : &*accIt;
     }
 }
 

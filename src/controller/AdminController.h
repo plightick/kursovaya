@@ -18,7 +18,11 @@ public:
     Q_INVOKABLE QStringList sortUsersByAccountCount() const;
     Q_INVOKABLE QStringList sortUsers(const QString &sortBy) const; // "accounts", "cards", "transactions", "name"
     Q_INVOKABLE QVariantList getAllUsersInfo(const QString &sortBy = "") const; // Returns full user info with accounts, cards, transactions count
-    Q_INVOKABLE QVariantList sortTransfers(const QString &sortBy) const; // "user", "amount", "date", "status"
+        Q_INVOKABLE QVariantList sortTransfers(const QString &sortBy) const; // "user", "amount", "date", "status"
+
+    Q_INVOKABLE QVariantList listUserCards(const QString &username);
+    Q_INVOKABLE QVariantList listUserAccounts(const QString &username);
+    Q_INVOKABLE void setAccountBalance(const QString &accountNumber, qlonglong cents);
 
 signals:
     void errorOccured(const QString &message);

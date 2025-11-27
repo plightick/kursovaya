@@ -1,4 +1,8 @@
 #include "BankController.h"
+#include "AuthController.h"
+#include "AccountController.h"
+#include "TransactionController.h"
+#include "AdminController.h"
 #include "storage/UserStorage.h"
 #include "utils/Exceptions.h"
 #include "utils/Utils.h"
@@ -12,34 +16,35 @@ void BankController::seedAdmin() const {
     storage::UserStorage::ensureDataDirs();
 }
 
-BankController::BankController(QObject *parent) : QObject(parent) {
-    connect(&m_authController, &AuthController::authenticatedChanged, this, &BankController::onAuthenticatedChanged);
-    connect(&m_authController, &AuthController::errorOccured, this, &BankController::errorOccured);
-    connect(&m_authController, &AuthController::infoMessage, this, &BankController::infoMessage);
+BankController::BankController(QObject *parent)
+    : QObject(parent), m_authController(new AuthController(this)) {
+    connect(m_authController, &AuthController::authenticatedChanged, this, &BankController::onAuthenticatedChanged);
+    connect(m_authController, &AuthController::errorOccured, this, &BankController::errorOccured);
+    connect(m_authController, &AuthController::infoMessage, this, &BankController::infoMessage);
 }
 
 void BankController::login(const QString &username, const QString &password) {
-    m_authController.login(username, password);
+    m_authController->login(username, password);
 }
 
 void BankController::logout() {
-    m_authController.logout();
+    m_authController->logout();
 }
 
 void BankController::registerUser(const QString &username, const QString &password) {
-    m_authController.registerUser(username, password);
+    m_authController->registerUser(username, password);
 }
 
 bool BankController::isAuthenticated() const {
-    return m_authController.isAuthenticated();
+    return m_authController->isAuthenticated();
 }
 
 bool BankController::isAdmin() const {
-    return m_authController.isAdmin();
+    return m_authController->isAdmin();
 }
 
 QString BankController::username() const {
-    return m_authController.username();
+    return m_authController->username();
 }
 
 void BankController::onAuthenticatedChanged() {
@@ -50,14 +55,14 @@ void BankController::onAuthenticatedChanged() {
     delete m_adminController;
     m_adminController = nullptr;
 
-    if (m_authController.isAuthenticated()) {
-        if (m_authController.isAdmin()) {
+    if (m_authController->isAuthenticated()) {
+        if (m_authController->isAdmin()) {
             m_adminController = new AdminController(this);
             connect(m_adminController, &AdminController::errorOccured, this, &BankController::errorOccured);
             connect(m_adminController, &AdminController::infoMessage, this, &BankController::infoMessage);
         } else {
-            m_accountController = new AccountController(m_authController.getCurrentUser(), this);
-            m_transactionController = new TransactionController(m_authController.getCurrentUser(), this);
+            m_accountController = new AccountController(m_authController->getCurrentUser(), this);
+            m_transactionController = new TransactionController(m_authController->getCurrentUser(), this);
             connect(m_accountController, &AccountController::errorOccured, this, &BankController::errorOccured);
             connect(m_accountController, &AccountController::infoMessage, this, &BankController::infoMessage);
             connect(m_transactionController, &TransactionController::errorOccured, this, &BankController::errorOccured);
@@ -137,7 +142,91 @@ QString BankController::saveReceiptToFile(const QString &transactionId, const QS
     return m_transactionController->saveReceiptToFile(transactionId, filePath);
 }
 
-const QString BankController::ratesText() const {
+QVariantList BankController::listUserCards(const QString &username) const
+{
+    if (!m_adminController) return {};
+    return m_adminController->listUserCards(username);
+}
+
+QVariantList BankController::listUserAccounts(const QString &username) const
+{
+    if (!m_adminController) return {};
+    return m_adminController->listUserAccounts(username);
+}
+
+QVariantList BankController::listNotifications() const
+{
+    if (!m_accountController) return {};
+    return m_accountController->listNotifications();
+}
+
+void BankController::clearNotifications()
+{
+    if (!m_accountController) return;
+    m_accountController->clearNotifications();
+}
+
+void BankController::setAccountBalance(const QString &accountNumber, qlonglong cents)
+{
+    if (!m_adminController) return;
+    m_adminController->setAccountBalance(accountNumber, cents);
+}
+
+QVariantList BankController::listAllTransfers(const QString &query) const
+{
+    if (!m_adminController) return {};
+    return m_adminController->listAllTransfers(query);
+}
+
+void BankController::cancelTransfer(const QString &transactionId, const QString &reason)
+{
+    if (!m_adminController) return;
+    m_adminController->cancelTransfer(transactionId, reason);
+}
+
+void BankController::clearAllUsers()
+{
+    if (!m_adminController) return;
+    m_adminController->clearAllUsers();
+}
+
+QStringList BankController::listUsers() const
+{
+    if (!m_adminController) return {};
+    return m_adminController->listUsers();
+}
+
+QStringList BankController::searchUsers(const QString &query) const
+{
+    if (!m_adminController) return {};
+    return m_adminController->searchUsers(query);
+}
+
+QStringList BankController::sortUsersByAccountCount() const
+{
+    if (!m_adminController) return {};
+    return m_adminController->sortUsersByAccountCount();
+}
+
+QStringList BankController::sortUsers(const QString &sortBy) const
+{
+    if (!m_adminController) return {};
+    return m_adminController->sortUsers(sortBy);
+}
+
+QVariantList BankController::getAllUsersInfo(const QString &sortBy) const
+{
+    if (!m_adminController) return {};
+    return m_adminController->getAllUsersInfo(sortBy);
+}
+
+QVariantList BankController::sortTransfers(const QString &sortBy) const
+{
+    if (!m_adminController) return {};
+    return m_adminController->sortTransfers(sortBy);
+}
+
+QString BankController::ratesText() const {
     try {
         std::filesystem::create_directories("data");
         auto path = std::filesystem::path("data/rates.txt");

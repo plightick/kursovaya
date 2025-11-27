@@ -14,7 +14,6 @@ public:
     Account(std::string number, std::string curr, long long cents)
         : accountNumber(std::move(number)), currency(std::move(curr)), balanceCents(cents) {}
 
-    auto operator<=>(const Account &other) const = default;
 
     friend std::ostream &operator<<(std::ostream &os, const Account &acc) {
         os << acc.accountNumber << "," << acc.currency << "," << acc.balanceCents;

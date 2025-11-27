@@ -13,7 +13,10 @@ public:
     Q_INVOKABLE QVariantList listAccounts() const;
     Q_INVOKABLE QVariantList listCards() const;
     Q_INVOKABLE void addAccount(const QString &currency);
-    Q_INVOKABLE void addCard(const QString &holderName, const QString &expiry, const QString &linkedAccount);
+        Q_INVOKABLE void addCard(const QString &holderName, const QString &expiry, const QString &linkedAccount);
+
+    Q_INVOKABLE QVariantList listNotifications() const;
+    Q_INVOKABLE void clearNotifications();
 
 signals:
     void errorOccured(const QString &message);

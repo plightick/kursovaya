@@ -1,10 +1,10 @@
 #pragma once
 
 #include <string>
-#include <format>
 #include <string_view>
 #include <random>
-#include <format>
+#include <sstream>
+#include <iomanip>
 #include <functional>
 
 namespace utils {
@@ -43,7 +43,9 @@ inline std::string trim(std::string_view s) {
 inline std::string weakHash(std::string_view input) {
     std::hash<std::string_view> hasher;
     auto h = hasher(input);
-    return std::format("{:016x}", h);
+    std::stringstream ss;
+    ss << std::hex << std::setw(16) << std::setfill('0') << h;
+    return ss.str();
 }
 
 }

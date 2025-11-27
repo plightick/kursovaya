@@ -69,3 +69,19 @@ void AccountController::addCard([[maybe_unused]] const QString &holderName, cons
 void AccountController::saveCurrentUser() const {
     UserStorage::saveUser(currentUser);
 }
+
+QVariantList AccountController::listNotifications() const
+{
+    QVariantList out;
+    for (const auto &notification : currentUser.notifications) {
+        out.append(QString::fromStdString(notification));
+    }
+    return out;
+}
+
+void AccountController::clearNotifications()
+{
+    currentUser.notifications.clear();
+    saveCurrentUser();
+    emit infoMessage("Уведомления очищены");
+}
