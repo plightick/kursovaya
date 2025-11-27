@@ -231,16 +231,17 @@ void TransactionController::saveCurrentUser() {
 
 namespace {
     Account* findAccountByCard(RegularUser& user, std::string_view cardNum) {
-        for (const auto& card : user.cards) {
-            if (card.cardNumber == cardNum) {
-                for (auto& account : user.accounts) {
-                    if (account.accountNumber == card.linkedAccount) {
-                        return &account;
-                    }
-                }
-            }
+        auto cardIt = std::find_if(user.cards.begin(), user.cards.end(),
+                                 [cardNum](const Card& card) { return card.cardNumber == cardNum; });
+
+        if (cardIt == user.cards.end()) {
+            return nullptr;
         }
-        return nullptr;
+
+        auto accIt = std::find_if(user.accounts.begin(), user.accounts.end(),
+                                [&](const Account& acc) { return acc.accountNumber == cardIt->linkedAccount; });
+
+        return (accIt == user.accounts.end()) ? nullptr : &*accIt;
     }
 }
 

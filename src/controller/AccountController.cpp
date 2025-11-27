@@ -66,6 +66,6 @@ void AccountController::addCard([[maybe_unused]] const QString &holderName, cons
     }
 }
 
-void AccountController::saveCurrentUser() {
+void AccountController::saveCurrentUser() const {
     UserStorage::saveUser(currentUser);
 }

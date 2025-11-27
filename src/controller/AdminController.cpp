@@ -18,21 +18,28 @@ namespace {
 
     bool cancelUserTx(RegularUser &user, std::string_view txId, std::string_view reason,
                       std::string &outToCard, long long &outCents) {
-        for (auto &t : user.history) {
-            if (t.id != txId) continue;
-            if (t.status == "cancelled") throw ValidationError("Платеж уже отменен");
-            if (auto *acc = findAccount(user, t.fromAccount)) {
-                acc->balanceCents += t.cents;
-            }
-            t.status = "cancelled";
-            t.cancelReason = std::string(reason);
-            user.notifications.push_back("Платеж " + t.id + " отменен: " + std::string(reason));
-            outToCard = t.toCard;
-            outCents = t.cents;
-            UserStorage::saveUser(user);
-            return true;
+        auto it = std::find_if(user.history.begin(), user.history.end(),
+                               [txId](const Transaction& t) { return t.id == txId; });
+
+        if (it == user.history.end()) {
+            return false;
         }
-        return false;
+
+        if (it->status == "cancelled") {
+            throw ValidationError("Платеж уже отменен");
+        }
+
+        if (auto *acc = findAccount(user, it->fromAccount)) {
+            acc->balanceCents += it->cents;
+        }
+
+        it->status = "cancelled";
+        it->cancelReason = std::string(reason);
+        user.notifications.push_back("Платеж " + it->id + " отменен: " + std::string(reason));
+        outToCard = it->toCard;
+        outCents = it->cents;
+        UserStorage::saveUser(user);
+        return true;
     }
 
     void tryNotifyRecipient(std::string_view recipientName, std::string_view txId, std::string_view reason) {
@@ -110,8 +117,7 @@ void AdminController::cancelTransfer(const QString &transactionId, const QString
             std::string toCard;
             long long cents = 0;
             if (cancelUserTx(user, txId, reasonStd, toCard, cents)) {
-                std::string recipientName;
-                if (adjustRecipientBalance(toCard, -cents, &recipientName) && !recipientName.empty() && recipientName != user.usernameValue) {
+                if (std::string recipientName; adjustRecipientBalance(toCard, -cents, &recipientName) && !recipientName.empty() && recipientName != user.usernameValue) {
                     tryNotifyRecipient(recipientName, txId, reasonStd);
                 }
                 emit infoMessage("Платеж отменен");

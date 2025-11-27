@@ -21,5 +21,5 @@ signals:
 
 private:
     RegularUser &currentUser;
-    void saveCurrentUser();
+    void saveCurrentUser() const;
 };
